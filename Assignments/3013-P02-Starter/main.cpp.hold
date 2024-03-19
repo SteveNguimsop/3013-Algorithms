@@ -1,0 +1,334 @@
+/**
+ * This program uses a "getch" function which means "get character".
+ * However, getch does not print the character to the terminal, it
+ * lets you decide what to do based on what character you are pressing.
+ *
+ * You can test which characters are being pressed using their ascii values.
+ *
+ * An ascii table here should be helpful
+ *      http://www.asciitable.com/
+ *
+ * Some integer values for some keys:
+ *      LowerCase Letters   = 97(a) -> 122(z)
+ *      UpperCase Letters   = 65(A) -> 90(Z)
+ *      Enter Key           = 10
+ *      Space Bar           = 32
+ *
+ *      Arrow Keys          = Have same values as some letters
+ *                            so we can't distinguish between
+ *                            the two (in this context).
+ *
+ * Code below is a basic example of using a "getch" function along with
+ * searching an array of words for partial matches.
+ *
+ * https://repl.it/@rugbyprof/getchexample#main.cpp
+
+ rang only depends on C++ standard library, unistd.h system header on unix and windows.h & io.h system headers on windows based systems. In other words, you don't need any 3rd party dependencies.
+ */
+
+#include "./headers/json.hpp"
+#include "./headers/mygetch.hpp"
+#include "./headers/timer.hpp"
+#include "./headers/rang.hpp"
+#include <algorithm>
+#include <chrono>
+#include <fstream>
+#include <iostream>
+#include <thread>
+#include <time.h>
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
+#define DEBUG false
+
+using namespace std;
+using namespace rang;
+
+void clearScreen() {
+    #ifdef _WIN32
+    // Windows-specific code
+    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    COORD coord = {0, 0};
+    DWORD count;
+
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hStdOut, &csbi);
+
+    FillConsoleOutputCharacter(hStdOut, ' ', csbi.dwSize.X * csbi.dwSize.Y, coord, &count);
+    SetConsoleCursorPosition(hStdOut, coord);
+    #else
+    // ANSI escape code for Unix-like systems
+    std::cout << "\033[2J\033[1;1H";
+    #endif
+}
+
+
+// Used but could be used better
+void debug(string s = "", string end = "\n") {
+    if(!DEBUG){
+      return;
+    }
+    static int call = 1;
+    cout << "Debug " << call << ":" << s << end;
+    call++;
+}
+
+// Not Used
+void print(string s, string end = "\n") {
+    cout << s << end;
+}
+
+// Not Used
+void sleep_for_milliseconds(int milliseconds) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+}
+
+
+
+// /**
+//  * countLines
+//  *
+//  * Description:
+//  *      Originally wrote this to count size of input file so
+//  *      I could allocate enough memory for an array of strings.
+//  *      Even though I went with a vector below, this isn't totally
+//  *      useless.
+//  * Params:
+//  *      string file_name - file to get the line count
+//  *
+//  * Returns:
+//  *      int - line count
+//  */
+// int countLines(string file_name) {
+//     ifstream inFile(file_name);
+//     return count(istreambuf_iterator<char>(inFile), istreambuf_iterator<char>(), '\n');
+// }
+
+/**
+ * loadData
+ *
+ * Description:
+ *      Loads a file of strings (words, names, whatever) reading them in
+ *      with one word per line. So words must be delimited by newlines '\n'
+ * Params:
+ *      string file_name - file to get the line count
+ *
+ * Returns:
+ *      int - line count
+ */
+vector<string> loadData(string file_name) {
+    debug("loadfile");
+    ifstream fin; // file to get animal names
+    // int count = (countLines(file_name) + 1); // get size of input file
+    // debug("cout: " + to_string(count));
+    vector<string> array; // allocate vector of correct size
+    string animal;
+
+    fin.open("./data/animals_small.txt"); // open file for reading
+
+    // knowing the size of the file lets us treat
+    // it like an array without using .push_back(value)
+    while (fin >> animal) {
+        debug(animal);
+        // animal = tolower(animal);
+        array.push_back(animal);
+        // read in animals
+    }
+
+    return array;
+}
+
+/**
+ * partialMatch
+ *
+ * Description:
+ *      Finds partial matches in an array of strings and returns them. It
+ *      doesn't matter where in the string the match is.
+ * Params:
+ *      vector<string>  array       - array to search
+ *      string          substring   - substring to search for in each word
+ *
+ * Returns:
+ *      vector<string> - holding all the matches to substring
+ */
+vector<string> partialMatch(vector<string> array, string substring) {
+    vector<string> matches; // to hold any matches
+    size_t found;           // size_t is an integer position of
+                            // found item. -1 if its not found.
+
+    if (substring.size() == 0) {
+        return matches;
+    }
+
+    for (int i = 0; i < array.size(); i++) { // loop through array
+        found = array[i].find(substring);    // check for substr match
+        if (found != string::npos) {         // if found >= 0 (its found then)
+            matches.push_back(array[i]);     // add to matches
+        }
+    }
+
+    return matches;
+}
+
+void titleBar(string title, int length = 0) {
+    string line = string(length, ' ');
+    cout << style::underline << fg::cyan << title << style::reset << line << endl;
+}
+
+int main() {
+
+    char k; // holder for character being typed
+    string key;
+    string word = "";       // var to concatenate letters to
+    vector<string> animals; // array of animal names
+    vector<string> matches; // any matches found in vector of animals
+    int loc;                // location of substring to change its color
+    string title = "GETCH WORD LOOKUP";
+    string resultsLabel = "RESULTS:";
+    string line;
+    string message;
+    string pbp;
+    bool deleting = false;
+    string temp;
+
+    // auto sclr = system("clear");
+
+    Timer T;   // create a timer
+    T.Start(); // start it
+
+    debug();
+
+    animals = loadData("./data/animals_small.txt");
+
+    T.End(); // end the current timer
+
+    int nanoseconds = (int)T.NanoSeconds();
+    int i;
+    for (i = 0; nanoseconds != 0; i++) {
+        cout << nanoseconds << endl;
+        nanoseconds = nanoseconds / 10;
+    }
+    debug();
+
+
+
+    message = "These values are showing how long it took to load the data file in three different time granularity's.\n";
+    cout << style::underline << style::bold << fgB::cyan << title << line << fg::reset << style::reset<<endl
+         << endl;
+    debug();
+    // print out how long it took to load the animals file
+    cout << fg::magenta << message << fg::reset << endl;
+    cout << style::underline << fg::cyan << "Load Times:" << fg::reset << style::reset<<endl;
+    cout << style::bold << fg::green << "   Seconds:      " << fg::yellow << T.Seconds() << fg::reset << endl;
+    cout << style::bold << fg::green << "   Milliseconds: " << fg::yellow << T.MilliSeconds() << fg::reset << endl;
+    cout << style::bold << fg::green << "   NanoSeconds:  " << fg::yellow << T.NanoSeconds() << fg::reset << endl;
+
+    cout << style::underline << style::bold << fgB::cyan << line << fg::reset << style::reset<<endl
+         << endl;
+    debug();
+    // While capital Z is not typed keep looping
+
+    message = "1. Type letters and watch the results change.\n";
+    message += "2. Hit the DEL key to erase a letter from your search string.\n";
+    message += "3: Current Substr: ";
+
+    while ((k = getch()) != 'Z') {
+        debug();
+        clearScreen();
+        T.Start(); // start it
+        // Tests for a backspace and if pressed deletes
+        // last letter from "word".
+        if ((int)k == 127) {
+            if (word.size() > 0) {
+                word = word.substr(0, word.size() - 1);
+                deleting = true;
+            }
+        } else {
+            deleting = false;
+            // Make sure a letter was pressed and only letter
+            if (!isalpha(k)) {
+                cout << bgB::red << fgB::gray << "Letters only!" << fg::reset << bg::reset<<endl;
+                sleep(1);
+                continue;
+            }
+
+            // We know its a letter, lets make sure its lowercase.
+            // Any letter with ascii value < 97 is capital so we
+            // lower it.
+            if ((int)k < 97) {
+                k += 32;
+            }
+            word += k; // append char to word
+        }
+
+        // Find any animals in the array that partially match
+        // our substr word
+        matches = partialMatch(animals, word);
+
+        if ((int)k != 32) { // if k is not a space print it
+
+            key = to_string(k);
+            T.End();
+            // Getting the correct precision to print out in c++ is not
+            // straight forward. Strings and precision output are convoluted
+            // at best. And drive you crazy at worst
+
+
+            //pbp = "Play By Play";
+
+
+            for (auto &c: word) c = toupper(c);
+
+            // cout << style::underline << style::bold << fgB::cyan << pbp << line << fg::reset << style::reset<<endl
+            //      << endl;
+            cout << fgB::magenta << message << bg::black<<fg::gray<<" "<<word<<fg::reset << endl<<endl;
+            cout << style::underline << style::bold << fgB::cyan << title << style::reset<<line << fg::reset <<endl;
+            cout << fg::green << style::bold << "   Seconds:\t\t\t" << fg::reset << style::reset<< fg::yellow << printf("%.17f", (double)T.NanoSeconds() / 1000000000)
+                 << fg::reset << endl;
+            cout << fg::green << style::bold << "   KeyPressed: \t\t" << style::reset << fg::yellow;
+            if (int(k) == 127) {
+                cout << "del";
+            } else {
+                cout << k;
+            }
+            cout << " = " << (int)k << fg::reset << endl;
+            cout << fg::green << style::bold << "   Current Substr: \t" << fg::reset << style::reset<< fg::red << word << fg::reset << endl;
+            cout << endl;
+            cout << style::underline << style::bold << fgB::cyan << resultsLabel << line << fg::reset << style::reset<<endl;
+
+            cout << fg::green;
+            for (auto &c: word) c = tolower(c);
+            // This prints out all found matches
+            for (int i = 0; i < matches.size(); i++) {
+                // find the substring in the word
+                loc = matches[i].find(word);
+                // if its found
+                if (loc != string::npos) {
+                    // print one letter at a time turning on red or green
+                    //  depending on if the matching subtring is being printed
+                    cout << style::bold;
+                    for (int j = 0; j < matches[i].size(); j++) {
+                        // if we are printing the substring turn it red
+                        if (j >= loc && j <= loc + word.size() - 1) {
+                            cout << fg::red;
+                        } else {
+                            cout << fg::blue;
+                        }
+                        cout << matches[i][j];
+                    }
+                    cout << fg::blue;
+                }
+                cout << " ";
+            }
+            cout << fg::reset << endl
+                 << endl;
+
+        }
+    }
+    return 0;
+}
